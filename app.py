@@ -1,36 +1,50 @@
 import streamlit as st
-from transformers import AutoModelForCausalLM, AutoTokenizer
-from datasets import load_dataset
+import pandas as pd
+from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
-# 데이터셋 로드
-dataset = load_dataset("jinzzang23/test_data_4")
+st.title("Test Chatbot by HuggingFace")
 
-# 모델과 토크나이저 로드
-model_name = "beomi/llama-2-ko-7b"
-tokenizer = AutoTokenizer.from_pretrained(model_name)
-model = AutoModelForCausalLM.from_pretrained(model_name)
+# 허깅페이스 모델 로드
+@st.cache_resource
+def load_model():
+    tokenizer = AutoTokenizer.from_pretrained("MLP-KTLim/llama-3-Korean-Bllossom-8B")
+    model = AutoModelForCausalLM.from_pretrained(
+        "MLP-KTLim/llama-3-Korean-Bllossom-8B",
+        device_map = "auto",
+        torch_dtype=torch.float16
+    )
+    return tokenizer, model
 
-# 응답 생성 함수
-def generate_response(prompt):
-    # 입력 프롬프트 인코딩
-    inputs = tokenizer.encode(prompt + tokenizer.eos_token, return_tensors="pt")
+tokenizer, model = load_model()
 
-    # 응답 생성
-    with torch.no_grad():
-        outputs = model.generate(inputs, max_length=100, num_return_sequences=1)
+# 파일 업로드
+uploaded_file = st.file_uploader("Upload an Excel file", type="xlsx")
+query = st.text_area("Enter your query in Korean")
 
-    # 응답 디코딩
-    response = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return response
+# 처리
+if uploaded_file is not None:
+    df = pd.read_excel(uploaded_file)
+    st.write("Data Preview:")
+    st.write(df.head(3))
 
-# Streamlit 앱 설정
-st.title("챗봇")
-st.write("안녕하세요! 무엇을 도와드릴까요?")
+    if query:
+        try:
+            df_into = df.describe().to_string()
+            prompt = f"다음 데이터를 기반으로 질문에 답하세요 : {df_into}\n질문: {query}\n답변:"
 
-# 사용자 입력 받기
-user_input = st.text_input("You:")
+            # 입력 텍스트 토크나이즈
+            inputs = tokenizer(prompt, return_tensors="pt").to("cuda")
 
-if user_input:
-    response = generate_response(user_input)
-    st.write("Chatbot:", response)
+            # 모델 통해서 답변 생성
+            outputs = model.generate(inputs.input_ids, max_length=300,  do_sample=True, top_p=0.95, top_k=60)
+
+            # 생성 답변 디코딩
+            response = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+            # 응답 출력
+            st.write("Chatbot Response:")
+            st.write(response)
+
+        except Exception as e:
+            st.error(f"An error Occurred: {str(e)}")
