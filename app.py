@@ -3,6 +3,11 @@ import pandas as pd
 from transformers import AutoTokenizer, AutoModelForCausalLM
 import torch
 
+# 허깅페이스 로그인
+import huggingface_hub
+huggingface_hub.login('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')
+print('로그인 완료')
+
 st.title("Test Chatbot by HuggingFace")
 
 # 허깅페이스 모델 로드
